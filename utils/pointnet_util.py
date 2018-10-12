@@ -288,7 +288,8 @@ def weight_layer(xyz, points, mlp, is_training=True, scope = 'weight', bn_decay=
                                         padding='VALID', stride=[1, 1],
                                         bn=bn, is_training=is_training,
                                         scope='weight', bn_decay=bn_decay)  ## [B,N,1,8]
-        neigbor_weight = tf.sigmoid(neigbor_weight)
+        #neigbor_weight = tf.sigmoid(neigbor_weight)
+        neigbor_weight = tf.nn.softmax(neigbor_weight, dim=3)
         neigbor_weight = tf.tile(tf.transpose(neigbor_weight, [0, 1, 3, 2]), [1, 1, 1, mlp])  ## [B,N,8,C2] dio
 
 
