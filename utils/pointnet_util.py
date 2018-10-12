@@ -302,7 +302,7 @@ def weight_layer(xyz, points, mlp, idx=None, is_training=True, scope = 'weight',
 
 
         ## weight sum + BN + Relu
-        weight_sum_points = tf.reduce_sum(neighbor_points * neigbor_weight, axis=2)
+        weight_sum_points = tf.reduce_sum(tf.multiply(neighbor_points, neigbor_weight), axis=2)
         weight_sum_points = tf_util.batch_norm_for_conv2d(weight_sum_points, is_training,
                                                     bn_decay=bn_decay, scope='bn',data_format='NHWC')
         weight_sum_points = tf.nn.relu(weight_sum_points)

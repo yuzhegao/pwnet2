@@ -108,7 +108,11 @@ venv.bak/
 ## custom config
 /.idea/*
 /test/*
+/data/*
 log/
 *.txt
-
+*.swp
+*.sh
+log_*/
+test_log/
 
