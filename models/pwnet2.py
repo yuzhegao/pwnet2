@@ -39,11 +39,11 @@ def get_model(point_cloud, is_training, bn_decay=None):
     ## [B,1,128]
 
     ## weight sum module
-    w1_points, idx = weight_layer(l0_xyz, l0_points, 64, idx=None, is_training=is_training, scope='we1')
-    w2_points, _ = weight_layer(l0_xyz, w1_points, 64, idx=idx, is_training=is_training, scope='we2')
+    w1_points, idx = weight_layer(l0_xyz, l0_points, 64, is_training=is_training, scope='we1')
+    w2_points, _ = weight_layer(l0_xyz, w1_points, 64, is_training=is_training, scope='we2')
 
     # FC layers
-    net = tf_util.conv1d(l0_points, 64, 1, padding='VALID', bn=True, is_training=is_training, scope='fc1', bn_decay=bn_decay)
+    net = tf_util.conv1d(w2_points, 64, 1, padding='VALID', bn=True, is_training=is_training, scope='fc1', bn_decay=bn_decay)
     end_points['feats'] = net
     net = tf_util.dropout(net, keep_prob=0.5, is_training=is_training, scope='dp1')
     net = tf_util.conv1d(net, 50, 1, padding='VALID', activation_fn=None, scope='fc2')

@@ -270,7 +270,7 @@ def pointSIFT_group_with_idx(xyz, idx, points, use_xyz=True):
 
 
 
-def weight_layer(xyz, points, mlp, idx=None, is_training=True, scope = 'weight', bn_decay=True, bn=True):
+def weight_layer(xyz, points, mlp, is_training=True, scope = 'weight', bn_decay=True, bn=True):
     ''' weight sum Module
             Input:
                 xyz1: [B,N,3]
@@ -280,29 +280,27 @@ def weight_layer(xyz, points, mlp, idx=None, is_training=True, scope = 'weight',
                 new_points: (batch_size, ndataset1, mlp[-1]) TF tensor
         '''
     with tf.variable_scope(scope) as sc:
-        if idx is None:
-            _, neighbor_points, idx, group_xyz = pointSIFT_group(0.25, xyz, points, use_xyz=False)  ## [B,N,8,C]
-        else:
-            _, neighbor_points, _, _ = pointSIFT_group_with_idx(xyz, idx, points)
-
-        neighbor_points = tf_util.conv2d(neighbor_points, mlp, [1, 1],
-                                    padding='VALID', stride=[1, 1],
-                                    bn=bn, is_training=is_training,
-                                    scope='transform' , bn_decay=bn_decay) ## [B,N,8,C2]
-
-        feat_dim =  neighbor_points.get_shape()[-1].value
         points_expand = tf.expand_dims(points,2) ## [B,N,1,C]
+        idx = pointSIFT_select(xyz, 0.25)
 
+        ## calculate 8-octant weight
         neigbor_weight = tf_util.conv2d(points_expand, 8, [1, 1],
+                                        padding='VALID', stride=[1, 1],
+                                        bn=bn, is_training=is_training,
+                                        scope='weight', bn_decay=bn_decay)  ## [B,N,1,8]
+        neigbor_weight = tf.sigmoid(neigbor_weight)
+        neigbor_weight = tf.tile(tf.transpose(neigbor_weight, [0, 1, 3, 2]), [1, 1, 1, mlp])  ## [B,N,8,C2] dio
+
+
+        points_trans = tf_util.conv2d(points_expand, mlp, [1, 1],
                                     padding='VALID', stride=[1, 1],
                                     bn=bn, is_training=is_training,
-                                    scope='weight' , bn_decay=bn_decay) ## [B,N,1,8]
-        neigbor_weight = tf.tile(tf.transpose(neigbor_weight,[0,1,3,2]),[1,1,1,feat_dim]) ## [B,N,8,C2]
-        neigbor_weight = tf.sigmoid(neigbor_weight)
+                                    scope='transform' , bn_decay=bn_decay) ## [B,N,1,C2] dio
 
-
+        _,points_neighbor,_,_ = pointSIFT_group_with_idx(xyz, idx, tf.squeeze(points_trans,axis=2), use_xyz=False) ## [B,N,8,C2] dio
+        
         ## weight sum + BN + Relu
-        weight_sum_points = tf.reduce_sum(tf.multiply(neighbor_points, neigbor_weight), axis=2)
+        weight_sum_points = tf.reduce_sum(tf.multiply(points_neighbor, neigbor_weight), axis=2)
         weight_sum_points = tf_util.batch_norm_for_conv2d(weight_sum_points, is_training,
                                                     bn_decay=bn_decay, scope='bn',data_format='NHWC')
         weight_sum_points = tf.nn.relu(weight_sum_points)
@@ -318,11 +316,12 @@ if __name__ == '__main__':
 
     with tf.Graph().as_default():
         pointclouds_pl = tf.placeholder(tf.float32, shape=(BATCH_SIZE, NUM_POINT, 6))
+        is_training_pl = tf.placeholder(tf.bool, shape=())
 
         xyz = tf.slice(pointclouds_pl, [0, 0, 0], [-1, -1, 3])
         points = pointclouds_pl
 
-        weight_pts,idx = weight_layer(xyz, points, 44,scope='weight1')
+        weight_pts, idx = weight_layer(xyz, points,is_training=is_training_pl ,mlp=24,scope='weight1')
         weight_pts2, _ = weight_layer(xyz, weight_pts, 44,scope='weight2')
 
         config = tf.ConfigProto()
@@ -334,9 +333,12 @@ if __name__ == '__main__':
         init = tf.global_variables_initializer()
         sess.run(init)
 
-        dict = {pointclouds_pl: pts}
-        [weight_pts2,idx] = sess.run([weight_pts,idx], feed_dict=dict)
-        print weight_pts.shape
+        dict = {pointclouds_pl: pts,is_training_pl:True}
+        [output_pts,idx] = sess.run([weight_pts2,idx], feed_dict=dict)
+        print output_pts.shape
+        print idx.shape
+        print idx.dtype
+        print type(idx)
 
 
 
