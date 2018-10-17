@@ -284,7 +284,7 @@ def weight_layer(xyz, points, mlp, is_training=True, scope = 'weight', bn_decay=
         idx = pointSIFT_select(xyz, 0.25)
 
         ## calculate 8-octant weight
-        neigbor_weight = tf_util.conv2d(points_expand, 8, [1, 1],
+        neigbor_weight = tf_util.conv2d(points_expand, 9, [1, 1],
                                         padding='VALID', stride=[1, 1],
                                         bn=bn, is_training=is_training,
                                         scope='weight', bn_decay=bn_decay)  ## [B,N,1,8]
@@ -292,19 +292,19 @@ def weight_layer(xyz, points, mlp, is_training=True, scope = 'weight', bn_decay=
         neigbor_weight = tf.nn.softmax(neigbor_weight, dim=3)
         neigbor_weight = tf.tile(tf.transpose(neigbor_weight, [0, 1, 3, 2]), [1, 1, 1, mlp])  ## [B,N,8,C2] dio
 
-
         points_trans = tf_util.conv2d(points_expand, mlp, [1, 1],
                                     padding='VALID', stride=[1, 1],
                                     bn=bn, is_training=is_training,
                                     scope='transform' , bn_decay=bn_decay) ## [B,N,1,C2] dio
 
         _,points_neighbor,_,_ = pointSIFT_group_with_idx(xyz, idx, tf.squeeze(points_trans,axis=2), use_xyz=False) ## [B,N,8,C2] dio
-        
+        points_neighbor = tf.concat(axis=2, values=[points_trans, points_neighbor])
+
         ## weight sum + BN + Relu
         weight_sum_points = tf.reduce_sum(tf.multiply(points_neighbor, neigbor_weight), axis=2)
-        weight_sum_points = tf_util.batch_norm_for_conv2d(weight_sum_points, is_training,
-                                                    bn_decay=bn_decay, scope='bn',data_format='NHWC')
-        weight_sum_points = tf.nn.relu(weight_sum_points)
+        #weight_sum_points = tf_util.batch_norm_for_conv1d(weight_sum_points, is_training,
+        #                                            bn_decay=bn_decay, scope='bn',data_format='NHWC')
+        #weight_sum_points = tf.nn.relu(weight_sum_points)
 
         return weight_sum_points,idx
 
