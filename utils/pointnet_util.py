@@ -308,6 +308,45 @@ def weight_layer(xyz, points, mlp, is_training=True, scope = 'weight', bn_decay=
 
         return weight_sum_points,idx
 
+def weight_layer_KNN(xyz, points, mlp, is_training=True, knn_num=8, scope = 'weight', bn_decay=True, bn=True):
+    ''' weight sum Module
+            Input:
+                xyz1: [B,N,3]
+                points1: [B,N,C]
+                mlp: list of int32 -- output size for MLP on each point  ->last C = 8
+            Return:
+                new_points: (batch_size, ndataset1, mlp[-1]) TF tensor
+        '''
+    with tf.variable_scope(scope) as sc:
+        points_expand = tf.expand_dims(points,2) ## [B,N,1,C]
+        idx, _ = query_ball_point(0.25, knn_num, xyz, xyz)
+
+
+        ## calculate 8-octant weight
+        neigbor_weight = tf_util.conv2d(points_expand, knn_num+1, [1, 1],
+                                        padding='VALID', stride=[1, 1],
+                                        bn=bn, is_training=is_training,
+                                        scope='weight', bn_decay=bn_decay)  ## [B,N,1,8]
+        neigbor_weight = tf.sigmoid(neigbor_weight)
+        neigbor_weight = tf.tile(tf.transpose(neigbor_weight, [0, 1, 3, 2]), [1, 1, 1, mlp])  ## [B,N,8,C2] dio
+
+        points_trans = tf_util.conv2d(points_expand, mlp, [1, 1],
+                                    padding='VALID', stride=[1, 1],
+                                    bn=bn, is_training=is_training,
+                                    scope='transform' , bn_decay=bn_decay) ## [B,N,1,C2] dio
+
+        _,points_neighbor,_,_ = pointSIFT_group_with_idx(xyz, idx, tf.squeeze(points_trans,axis=2), use_xyz=False) ## [B,N,8,C2] dio
+        points_neighbor = tf.concat(axis=2, values=[points_trans, points_neighbor])
+
+        ## weight sum + BN + Relu
+        weight_sum_points = tf.reduce_sum(tf.multiply(points_neighbor, neigbor_weight), axis=2)
+        #weight_sum_points = tf_util.batch_norm_for_conv1d(weight_sum_points, is_training,
+        #                                            bn_decay=bn_decay, scope='bn',data_format='NHWC')
+        #weight_sum_points = tf.nn.relu(weight_sum_points)
+
+
+        return weight_sum_points,idx
+
 
 if __name__ == '__main__':
     BATCH_SIZE = 32
@@ -322,8 +361,8 @@ if __name__ == '__main__':
         xyz = tf.slice(pointclouds_pl, [0, 0, 0], [-1, -1, 3])
         points = pointclouds_pl
 
-        weight_pts, idx = weight_layer(xyz, points,is_training=is_training_pl ,mlp=24,scope='weight1')
-        weight_pts2, _ = weight_layer(xyz, weight_pts, 44,scope='weight2')
+        weight_pts, idx = weight_layer_KNN(xyz, points,is_training=is_training_pl ,mlp=24,knn_num=8,scope='weight1')
+        weight_pts2, _ = weight_layer_KNN(xyz, weight_pts, 44,knn_num=8,scope='weight2')
 
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -335,7 +374,7 @@ if __name__ == '__main__':
         sess.run(init)
 
         dict = {pointclouds_pl: pts,is_training_pl:True}
-        [output_pts,idx] = sess.run([weight_pts2,idx], feed_dict=dict)
+        [output_pts,out_putidx] = sess.run([weight_pts2,idx], feed_dict=dict)
         print output_pts.shape
         print idx.shape
         print idx.dtype

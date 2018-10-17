@@ -6,7 +6,7 @@ sys.path.append(os.path.join(BASE_DIR, '../utils'))
 import tensorflow as tf
 import numpy as np
 import tf_util
-from pointnet_util import pointnet_sa_module, pointnet_fp_module, weight_layer
+from pointnet_util import pointnet_sa_module, pointnet_fp_module, weight_layer,weight_layer_KNN
 
 def placeholder_inputs(batch_size, num_point):
     pointclouds_pl = tf.placeholder(tf.float32, shape=(batch_size, num_point, 6))
@@ -39,7 +39,7 @@ def get_model(point_cloud, is_training, bn_decay=None):
     ## [B,1,128]
 
     ## weight sum module
-    we_points1, idx = weight_layer(l0_xyz, l0_points, 128, is_training=is_training, scope='we1')
+    we_points1, idx = weight_layer_KNN(l0_xyz, l0_points, 128, is_training=is_training, scope='we1')
     #we_points2, _ = weight_layer(l0_xyz, we_points1, 64, is_training=is_training, scope='we2')
 
     # FC layers
